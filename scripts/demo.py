@@ -101,4 +101,9 @@ result = answer(question, tokenizer, embed_text, chunks_meta, index, llm_fn=llm_
 
 # 打印最终答案
 print("\nFinal Answer:")
-print(result)
+print(result["answer"])
+print("\nCitations:", result["citations"])
+print("\nEvidence Pack:")
+for e in result["graph_context"].get("evidence", []):
+    print(e)
+

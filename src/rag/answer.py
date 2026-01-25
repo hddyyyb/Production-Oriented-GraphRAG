@@ -1,6 +1,19 @@
 from typing import List, Dict
 import numpy as np
+import re
+from typing import Optional, Set
 
+def infer_allowed_doc_ids(question: str) -> Optional[Set[str]]:
+    q = question.lower()
+    # 最小可用：关键词门控。你后面再升级成分类器也行
+    if re.search(r"\bloan(s)?\b|\blending\b|\bcredit\b|\bmortgage\b|\bund(er)?writing\b", q):
+        return {"loan_policy", "credit_risk_manual", "kyc_aml_guideline"}
+    return None  # None代表不做门控，兼容你其他问题
+
+def filter_chunks_by_doc(retrieved_chunks, allowed_doc_ids: Optional[Set[str]]):
+    if not allowed_doc_ids:
+        return retrieved_chunks
+    return [c for c in retrieved_chunks if c.get("doc_id") in allowed_doc_ids]
 
 
 def trim_context_to_budget(context: str, tokenizer, question: str, instruction: str, max_ctx=2048, max_new_tokens=150):
@@ -31,24 +44,97 @@ def trim_context_to_budget(context: str, tokenizer, question: str, instruction: 
     return trimmed_ctx
 
 
+
+
+def expand_neighbors_same_doc(retrieved_chunks, chunks_meta, window=1):
+    # 建一个chunk_id -> index映射（假设chunks_meta顺序稳定）
+    id2idx = {c["chunk_id"]: i for i, c in enumerate(chunks_meta)}
+    expanded = []
+    seen = set()
+    for c in retrieved_chunks:
+        idx = id2idx.get(c["chunk_id"])
+        if idx is None:
+            continue
+        # 在chunks_meta里找同doc的邻居（简单做：向前向后扫）
+        for j in range(max(0, idx - 5), min(len(chunks_meta), idx + 6)):
+            if chunks_meta[j].get("doc_id") == c.get("doc_id"):
+                # 粗略邻居：同doc都可；你也可以只取±window的chunk序号
+                cid = chunks_meta[j]["chunk_id"]
+                if cid not in seen:
+                    expanded.append(chunks_meta[j])
+                    seen.add(cid)
+    return expanded
+
+
+
+
+
 def answer(question: str, tokenizer, embed_text, chunks_meta, index, llm_fn, top_k: int = 5):
     query_vec = embed_text(question).astype("float32")
     query_vec = np.expand_dims(query_vec, 0)
+    k_search = max(top_k * 3, top_k)
+    distances, idxs = index.search(query_vec, k_search)
 
-    distances, idxs = index.search(query_vec, top_k)
-    retrieved_chunks = [chunks_meta[i] for i in idxs[0]]
+    candidates = [chunks_meta[i] for i in idxs[0]]
+    allowed = infer_allowed_doc_ids(question)    # 是否包含贷款 / 信贷 / 风控相关词
+    retrieved_chunks = filter_chunks_by_doc(candidates, allowed)    # 保证loan问题不会再引用tourism_guide/customer_service/ecommerce这种离谱chunk。其他类型应该是有其他处理，但是这里没写
+
+
+    # Graph扩展
+    retrieved_chunks = expand_neighbors_same_doc(retrieved_chunks, chunks_meta)
+    retrieved_chunks = retrieved_chunks[:top_k]
+
+
+    # 如果过滤后空了：直接拒答（银行场景关键能力）
+    if len(retrieved_chunks) == 0:
+        return {
+            "answer": "I don't know based on the provided documents.",
+            "citations": [],
+            "graph_context": {"retrieved_chunks": [], "note": "no relevant chunks after domain gate"}
+        }
 
     context = "\n\n".join([chunk["text"] for chunk in retrieved_chunks])
 
-    instruction = "Answer the question using ONLY the context. If missing, say you don't know."
+    #instruction = "Answer the question using ONLY the context. If missing, say you don't know."
+    instruction = (
+        "You are a banking policy assistant.\n"
+        "Answer using ONLY the Evidence.\n"
+        "If the Evidence is not about loan approval, say: \"I don't know based on the provided documents.\".\n"
+        "Output format:\n"
+        "Answer: <1-3 sentences>\n"
+        "Steps:\n"
+        "1.<step> (chunk_id)\n"
+        "2.<step> (chunk_id)\n"
+    )
+    # 逼模型给“步骤+chunk_id”
+    
     context_trimmed = trim_context_to_budget(context, tokenizer, question, instruction)
 
-    prompt = f"{instruction}\n\nContext:\n{context_trimmed}\n\nQuestion:\n{question}\n\nAnswer:"
-
+    # prompt = f"{instruction}\n\nContext:\n{context_trimmed}\n\nQuestion:\n{question}\n\nAnswer:"
+    prompt = (
+        f"{instruction}\n"
+        f"Evidence:\n{context_trimmed}\n\n"
+        f"Question:\n{question}\n\n"
+        f"Answer:\n"
+    )
     ans = llm_fn(prompt)
 
     citations = [c["chunk_id"] for c in retrieved_chunks]
-    return {"answer": ans, "citations": citations, "graph_context": {"retrieved_chunks": citations}}
+
+    # 让graph_context里带上每个chunk的doc_id和前100字，方便面试官看到“证据集”。
+    evidence_pack = [{"chunk_id": c["chunk_id"], "doc_id": c.get("doc_id", ""), "preview": c["text"][:120].replace("\n", " ")} for c in retrieved_chunks]
+    citations = [c["chunk_id"] for c in retrieved_chunks]
+    return {
+        "answer": ans,
+        "citations": citations,
+        "graph_context": {
+            "retrieved_chunks": citations,
+            "evidence": evidence_pack,
+            "domain_gate": sorted(list(allowed)) if allowed else None
+        }
+    }
+
+    #return {"answer": ans, "citations": citations, "graph_context": {"retrieved_chunks": citations}}
 
 
 def retrieve_top_k_chunks(query_vector: np.ndarray, chunks_meta: List[Dict], top_k: int, embed_text) -> List[Dict]:

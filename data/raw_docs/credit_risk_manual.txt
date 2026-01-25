@@ -1,0 +1,30 @@
+Credit Risk Management Manual
+
+This manual outlines key principles and mechanisms for managing credit risk throughout the loan lifecycle.
+
+1. Risk Rating
+Borrowers are assigned internal credit ratings based on quantitative and qualitative factors.
+Ratings influence approval authority, pricing, and monitoring intensity.
+
+2. Credit Exposure and Limits
+Credit limits are set at borrower, group, and portfolio levels.
+Exposure must comply with regulatory and internal concentration limits.
+
+3. Collateral and Guarantees
+Collateral types include cash, property, and other acceptable assets.
+Haircuts are applied based on liquidity and volatility.
+Guarantees are assessed independently.
+
+4. Exception Handling
+Any deviation from standard credit policy requires exception approval.
+Exceptions must include documented rationale and compensating controls.
+
+5. Review and Re-Assessment
+Credit facilities are subject to periodic review.
+Material changes in borrower risk profile trigger reassessment.
+
+6. Independent Review Mechanism
+Credit decisions are subject to independent review by risk management units.
+Separation of business origination and risk approval is enforced.
+
+This manual supports prudent lending by embedding risk controls into credit decisions.

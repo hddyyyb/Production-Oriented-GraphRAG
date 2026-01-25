@@ -1,0 +1,41 @@
+Loan Approval Policy
+
+This document describes the standard loan approval process used by the bank to ensure prudent credit decision-making, regulatory compliance, and risk control.
+
+1. Loan Application
+Customers submit a loan application including basic personal or corporate information, loan purpose, amount, and tenure.
+
+2. Document Collection
+Required documents are collected, including:
+- Identity documents
+- Income or financial statements
+- Business licenses (for corporate loans)
+- Collateral-related documents (if applicable)
+
+3. KYC and AML Screening
+Customer identity is verified according to KYC requirements.
+AML checks are performed against sanction lists, PEP lists, and adverse media.
+Applications failing KYC/AML checks are rejected or escalated.
+
+4. Credit Assessment
+Credit bureau reports are retrieved and analyzed.
+Key indicators include repayment history, debt ratio, and existing exposures.
+
+5. Credit Limit and Pricing
+Based on risk assessment, a credit limit is proposed.
+Loan pricing (interest rate, fees) is determined according to internal risk-based pricing rules.
+
+6. Approval Workflow
+- Standard cases follow automated or rule-based approval.
+- Non-standard or high-risk cases are submitted to the Credit Approval Committee.
+- Exception approvals must be documented with justification.
+
+7. Loan Disbursement
+After approval and contract signing, funds are disbursed to the borrower.
+All disbursement conditions must be satisfied.
+
+8. Post-Loan Management
+Ongoing monitoring includes repayment behavior, covenant checks, and risk signals.
+Early warning triggers may lead to review or intervention.
+
+This policy ensures consistency, transparency, and traceability in loan approval decisions.
