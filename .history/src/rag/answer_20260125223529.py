@@ -78,10 +78,6 @@ def answer(question: str, tokenizer, embed_text, chunks_meta, index, llm_fn, top
     allowed = infer_allowed_doc_ids(question)    # 是否包含贷款 / 信贷 / 风控相关词
     retrieved_chunks = filter_chunks_by_doc(candidates, allowed)    # 保证loan问题不会再引用tourism_guide/customer_service/ecommerce这种离谱chunk。其他类型应该是有其他处理，但是这里没写
 
-
-
-
-
     '''GraphRAG的“灵魂”-
     在向量召回的“局部相似性”基础上，引入“实体关系图”，
     把检索从“相似文本”升级为“语义相关证据子图”，

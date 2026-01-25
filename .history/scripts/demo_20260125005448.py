@@ -16,7 +16,6 @@ import faiss
 import numpy as np
 from transformers import GPTNeoForCausalLM, GPT2Tokenizer
 import torch
-import networkx as nx
 
 # 1) LLM（回答用）
 tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-neo-1.3B")
@@ -64,21 +63,6 @@ with open("data/index/chunks_meta.json", "r", encoding="utf-8") as f:
 index_path = "data/index/chunks.faiss"
 index = faiss.read_index(index_path)
 
-# load FAISS/chunks_meta之后，加上load图：
-
-
-
-graph_path = os.path.join("data", "index", "graph.gpickle")
-
-
-import pickle
-
-with open(graph_path, "rb") as f:
-    G = pickle.load(f)
-
-
-
-
 # 向量化函数（用于在demo中检索相似片段）
 # 2) Embedder（检索用）
 embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
@@ -113,8 +97,7 @@ for chunk in retrieved_chunks:
     print(f"Chunk ID: {chunk['chunk_id']}\nText: {chunk['text']}\n")
 
 # 调用答案生成函数（此处模拟调用实际LLM）
-#result = answer(question, tokenizer, embed_text, chunks_meta, index, llm_fn=llm_gpt_neo_function)
-result = answer(question, tokenizer, embed_text, chunks_meta, index, llm_fn=llm_gpt_neo_function, G=G)
+result = answer(question, tokenizer, embed_text, chunks_meta, index, llm_fn=llm_gpt_neo_function)
 
 # 打印最终答案
 print("\nFinal Answer:")

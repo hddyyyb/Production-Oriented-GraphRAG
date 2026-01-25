@@ -60,19 +60,3 @@ with open('data/processed/chunks.jsonl', 'w', encoding='utf-8') as f:
 build_faiss(embeddings, chunks_data)
 
 print("文档切块、向量化和 FAISS 索引构建完成！")
-
-import networkx as nx
-from src.graph.build_graph import build_graph
-
-chunks_meta_path = os.path.join("data", "index", "chunks_meta.json")
-G = build_graph(chunks_meta_path)
-
-graph_path = os.path.join("data", "index", "graph.gpickle")
-import pickle
-
-with open(graph_path, "wb") as f:
-    pickle.dump(G, f)
-
-print(f"Graph saved to: {graph_path}")
-
-

@@ -54,51 +54,24 @@ def trim_context_to_budget(context: str, tokenizer, question: str, instruction: 
 
 
 def answer(question: str, tokenizer, embed_text, chunks_meta, index, llm_fn, top_k: int = 5, G=None):
-    '''
-    d表示embedding
-    :param question: Description
-    :type question: str
-    :param tokenizer: Description
-    :param embed_text: Description
-    :param chunks_meta: Description
-    :param index: Description
-    :param llm_fn: Description
-    :param top_k: Description
-    :type top_k: int
-    :param G: Description
-    :return: Description
-    :rtype: dict[str, Any]
-    '''
-    query_vec = embed_text(question).astype("float32")  # (d,)
-    query_vec = np.expand_dims(query_vec, 0)    # shape: (1, d), (FAISS要求二维：nq x d, 这里nq=1)
-    k_search = max(top_k * 3, top_k)    
-    distances, idxs = index.search(query_vec, k_search)    # (1, k_search)
+    query_vec = embed_text(question).astype("float32")
+    query_vec = np.expand_dims(query_vec, 0)
+    k_search = max(top_k * 3, top_k)
+    distances, idxs = index.search(query_vec, k_search)
 
-    candidates = [chunks_meta[i] for i in idxs[0]]    # chunks_meta, 长度: N (全库chunk数), 每个元素c通常像：{"chunk_id": str, "text": str, "doc_id": str, ...}
+    candidates = [chunks_meta[i] for i in idxs[0]]
     allowed = infer_allowed_doc_ids(question)    # 是否包含贷款 / 信贷 / 风控相关词
     retrieved_chunks = filter_chunks_by_doc(candidates, allowed)    # 保证loan问题不会再引用tourism_guide/customer_service/ecommerce这种离谱chunk。其他类型应该是有其他处理，但是这里没写
 
 
-
-
-
-    '''GraphRAG的“灵魂”-
-    在向量召回的“局部相似性”基础上，引入“实体关系图”，
-    把检索从“相似文本”升级为“语义相关证据子图”，
-    用来补全流程型、跨段落的信息。'''
     # GraphRAG扩展：seed chunks -> entities -> more chunks
     chunk_lookup = {c["chunk_id"]: c for c in chunks_meta}  #  建一个 O(1) 的索引表，目的是：后面用chunk_id就能立刻拿到chunk文本
 
-    seed_chunks = [c["chunk_id"] for c in retrieved_chunks]  # FAISS 向量召回 + domain gate 后的 Top-N 相似chunk, Graph 扩展的种子节点
+    seed_chunks = [c["chunk_id"] for c in retrieved_chunks]
 
     graph_chunks = []
     if G is not None and expand_entities is not None and chunks_for_entities is not None:  #  expand_entities, chunks_for_entities是import的两个函数
-        ents = expand_entities(G, seed_chunks, hops=2, max_entities=30)   
-        # expand_entities 从 seed_chunks
-        # 找出它们 MENTIONS 的实体
-        # 在实体-实体关系图上 再走 1 跳（hops=2）
-        # 控制最多 30 个实体，防止爆炸
-
+        ents = expand_entities(G, seed_chunks, hops=2, max_entities=30)
         more_chunk_ids = chunks_for_entities(G, ents, max_chunks=30)
 
         # 反查回chunk文本
@@ -121,8 +94,6 @@ def answer(question: str, tokenizer, embed_text, chunks_meta, index, llm_fn, top
     retrieved_chunks = merged[:top_k]
 
 
-    print("seed_chunks:", seed_chunks[:5])
-    print("graph_expanded_chunks:", [c["chunk_id"] for c in graph_chunks[:10]])
 
 
 

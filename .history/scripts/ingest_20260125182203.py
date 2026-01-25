@@ -68,11 +68,6 @@ chunks_meta_path = os.path.join("data", "index", "chunks_meta.json")
 G = build_graph(chunks_meta_path)
 
 graph_path = os.path.join("data", "index", "graph.gpickle")
-import pickle
-
-with open(graph_path, "wb") as f:
-    pickle.dump(G, f)
+nx.write_gpickle(G, graph_path)
 
 print(f"Graph saved to: {graph_path}")
-
-

@@ -16,7 +16,6 @@ import faiss
 import numpy as np
 from transformers import GPTNeoForCausalLM, GPT2Tokenizer
 import torch
-import networkx as nx
 
 # 1) LLM（回答用）
 tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-neo-1.3B")
@@ -66,15 +65,11 @@ index = faiss.read_index(index_path)
 
 # load FAISS/chunks_meta之后，加上load图：
 
-
+import networkx as nx
+from networkx.readwrite.gpickle import read_gpickle
 
 graph_path = os.path.join("data", "index", "graph.gpickle")
-
-
-import pickle
-
-with open(graph_path, "rb") as f:
-    G = pickle.load(f)
+G = read_gpickle(graph_path)
 
 
 
