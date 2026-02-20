@@ -1,16 +1,23 @@
 # graphrag-lite
+
 End-to-end pipeline for knowledge graph–enhanced RAG on institutional documents.
 
-```
+> 这个仓库当前是一套“能跑通的最小GraphRAG流水线”：
+> **文档切块→向量索引(FAISS)→实体/关系图(NetworkX)→检索+图扩展→LLM基于证据回答**。
+
+---
+
+## 📦 Repo结构
+
+```text
 graphrag-lite/
   README.md
   requirements.txt
   .env.example
   data/
-    raw_docs/          # 放原始文档
-    processed/         # 切块后的jsonl
-    index/             # faiss索引
-    graph/             # nodes.jsonl edges.jsonl(或sqlite)
+    raw_docs/          # 放原始文档(txt)
+    processed/         # 切块后的jsonl(当前脚本输出chunks.jsonl)
+    index/             # FAISS索引 + chunks_meta.json + graph.gpickle
   src/
     config.py
     ingest/
@@ -32,6 +39,105 @@ graphrag-lite/
       golden.jsonl
       run_eval.py
   scripts/
-    ingest.py
-    build_graph.py
-    demo.py```
+    ingest.py          # 一键：切块+向量化+建FAISS+建图
+    build_graph.py     #（当前为空/占位）
+    demo.py            # 本地demo：检索+图扩展+LLM回答
+```
+
+---
+
+## ✅ 环境准备
+
+> 注意：仓库里的`requirements.txt`当前为空，因此请先按下面方式安装依赖（后续建议你补齐requirements.txt）。
+
+```bash
+git clone https://github.com/hddyyyb/graphrag-lite.git
+cd graphrag-lite
+
+python -m venv .venv
+# macOS / Linux
+source .venv/bin/activate
+# Windows PowerShell
+# .venv\Scripts\Activate.ps1
+
+python -m pip install -U pip
+python -m pip install numpy networkx sentence-transformers transformers torch faiss-cpu
+```
+
+---
+
+## ▶️ Quick Start（按仓库现有脚本可直接跑）
+
+### 1）准备文档
+
+把你的txt文档放到：
+
+```text
+data/raw_docs/*.txt
+```
+
+每个文件名会作为`doc_id`（例如`loan_policy.txt`→`doc_id="loan_policy"`）。
+
+### 2）一键构建索引与图
+
+`scripts/ingest.py`会完成：
+- 读取`data/raw_docs/*.txt`
+- 切块并写入`data/processed/chunks.jsonl`
+- 用`sentence-transformers/all-MiniLM-L6-v2`做embedding
+- 构建FAISS索引：`data/index/chunks.faiss` + `data/index/chunks_meta.json`
+- 构建图并保存：`data/index/graph.gpickle`
+
+运行：
+
+```bash
+python scripts/ingest.py
+```
+
+### 3）运行demo问答
+
+`demo.py`会：加载FAISS和图，做TopK召回+图扩展，然后用本地GPT-Neo生成答案。
+
+```bash
+python scripts/demo.py
+```
+
+你会看到：
+- Retrieved Chunks（召回证据）
+- Final Answer（生成答案）
+- Citations（chunk_id引用）
+- Evidence Pack（证据包）
+
+---
+
+## 🔎 GraphRAG是怎么接上的？（对应源码）
+
+- **向量召回**：`src/ingest/build_index.py`构建FAISS；`src/rag/answer.py`里`index.search()`召回候选chunk
+- **领域门控(domain gate)**：`infer_allowed_doc_ids()`对贷款类问题做最小门控，避免跨域乱引证据
+- **图扩展**：`src/rag/answer.py`里调用`src/graph/expand.py`（若存在实现）
+- **证据约束生成**：prompt要求“只用Evidence”，并输出步骤+chunk_id
+
+---
+
+## 🛠️ 常见问题
+
+### Q1：为什么`requirements.txt`和`.env.example`是空的？
+目前仓库还在“最小可跑”阶段，建议你下一步把依赖补齐到`requirements.txt`，并把模型/路径配置收敛到`src/config.py`或`.env`。
+
+### Q2：`scripts/build_graph.py`为什么是空的？
+现在建图逻辑已经在`scripts/ingest.py`末尾完成了（读取`chunks_meta.json`后构图并保存`graph.gpickle`）。
+你可以后续把它拆出来，让`build_graph.py`真正成为独立步骤。
+
+---
+
+## 🗺️ 下一步建议（工程化升级最短路径）
+
+1. 补齐`requirements.txt`（锁版本）  
+2. 把`SentenceTransformer`模型名、路径、top_k等做成配置项  
+3. 把`demo.py`里的LLM抽象成接口（支持OpenAI/本地/任意HF模型）  
+4. 加一个可复现评测：`src/eval/run_eval.py` + `golden.jsonl`  
+5. 做API化：完善`src/api/server.py`并提供`uvicorn`启动方式
+
+---
+
+## License
+TBD

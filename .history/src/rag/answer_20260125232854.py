@@ -15,15 +15,7 @@ def infer_allowed_doc_ids(question: str) -> Optional[Set[str]]:
     q = question.lower()
     # 最小可用：关键词门控。你后面再升级成分类器也行
     if re.search(r"\bloan(s)?\b|\blending\b|\bcredit\b|\bmortgage\b|\bund(er)?writing\b", q):
-        # 贷款问题：明确白名单（既严格、又覆盖loan流程与风控配套）
-        return {
-            "loan_policy",
-            "loan_approval_process",
-            "loan_exception_handling",
-            "credit_risk_manual",
-            "credit_risk_management",
-            "kyc_aml_guideline",
-        }
+        return {"loan_policy", "credit_risk_manual", "kyc_aml_guideline"}
     return None  # None代表不做门控，兼容你其他问题
 
 def filter_chunks_by_doc(retrieved_chunks, allowed_doc_ids: Optional[Set[str]]):
@@ -109,12 +101,9 @@ def answer(question: str, tokenizer, embed_text, chunks_meta, index, llm_fn, top
 
 
         # 找所有 chunk -MENTIONS-> entity
-        # 对于每一个entity， 根据边 chunk -MENTIONS-> entity
-        # 找到提到当前entiey的chunk
         more_chunk_ids = chunks_for_entities(G, ents, max_chunks=30)
 
-        # 把图返回的 chunk_id
-        # 变回完整 chunk（含 text / doc_id / metadata）
+        # 反查回chunk文本
         for cid in more_chunk_ids:
             if cid in chunk_lookup:
                 graph_chunks.append(chunk_lookup[cid])
@@ -129,69 +118,14 @@ def answer(question: str, tokenizer, embed_text, chunks_meta, index, llm_fn, top
             seen.add(cid)
 
     # 再做一次domain gate过滤（避免图扩展把你拉到别的domain）
-    # 2）让最终top_k强制包含一部分Graph补充证据（否则仍可能“扩了但选不上”）
-    #merged = filter_chunks_by_doc(merged, allowed)
-    #retrieved_chunks = merged[:top_k]
-    # 替换为下面“配额策略” (保留3个seed+2个graph, top_k=5时最合适)
-
-    # 再做一次domain gate过滤（避免图扩展把你拉到别的domain）
     merged = filter_chunks_by_doc(merged, allowed)
 
-    # --- 关键：给Graph扩展留配额，保证它能体现在最终证据里 ---
-
-    # 再做一次domain gate过滤（避免图扩展把你拉到别的domain）
-    merged = filter_chunks_by_doc(merged, allowed)
-
-    seed_set = set(seed_chunks)
-    seed_part = [c for c in merged if c["chunk_id"] in seed_set]
-    graph_part = [c for c in merged if c["chunk_id"] not in seed_set]
-
-    # 目标：seed里至少覆盖不同doc_id，同时给graph留位置
-    graph_quota = 2 if len(graph_part) > 0 and top_k >= 4 else (1 if len(graph_part) > 0 else 0)
-    seed_quota = max(1, top_k - graph_quota)
-
-    # --- 关键改动：seed按doc_id做“先覆盖后补足” ---
-    seed_selected = []
-    seen_docs = set()
-    seen_chunks = set()
-
-    # 第一轮：每个doc_id先拿一个（按seed_part原顺序=FAISS优先顺序）
-    for c in seed_part:
-        doc = c.get("doc_id", "")
-        if doc and doc not in seen_docs:
-            seed_selected.append(c)
-            seen_docs.add(doc)
-            seen_chunks.add(c["chunk_id"])
-        if len(seed_selected) >= seed_quota:
-            break
-
-    # 第二轮：按顺序补足到seed_quota
-    if len(seed_selected) < seed_quota:
-        for c in seed_part:
-            if c["chunk_id"] not in seen_chunks:
-                seed_selected.append(c)
-                seen_chunks.add(c["chunk_id"])
-            if len(seed_selected) >= seed_quota:
-                break
-
-    final_chunks = seed_selected
-
-    # --- 再补graph，保证GraphRAG收益能体现 ---
-    for c in graph_part:
-        if c["chunk_id"] not in seen_chunks:
-            final_chunks.append(c)
-            seen_chunks.add(c["chunk_id"])
-        if len(final_chunks) >= top_k:
-            break
-
-    retrieved_chunks = final_chunks
+    retrieved_chunks = merged[:top_k]
 
 
-    # 3）把debug打印改成“过滤后”的，避免你误以为门禁没生效
     print("seed_chunks:", seed_chunks[:5])
-    print("graph_expanded_chunks_raw:", [c["chunk_id"] for c in graph_chunks[:10]])
-    print("final_retrieved_chunks:", [c["chunk_id"] for c in retrieved_chunks])
-    print("final_doc_ids:", [c.get("doc_id","") for c in retrieved_chunks])
+    print("graph_expanded_chunks:", [c["chunk_id"] for c in graph_chunks[:10]])
+
 
 
 
@@ -228,29 +162,6 @@ def answer(question: str, tokenizer, embed_text, chunks_meta, index, llm_fn, top
         f"Answer:\n"
     )
     ans = llm_fn(prompt)
-
-    # 4）修复“Steps输出崩坏”：加一个强制格式化后处理（不依赖模型听话）
-
-    def _ensure_steps_format(ans_text: str, chunks: list) -> str:
-        # 如果模型没有按“Answer/Steps”结构输出，就兜底生成
-        if "Steps:" in ans_text and "Answer:" in ans_text:
-            return ans_text.strip()
-
-        # 兜底：用每个chunk的首句做step（可解释、稳定）
-        answer_line = ans_text.strip().splitlines()[0].strip() if ans_text.strip() else ""
-        if not answer_line:
-            answer_line = "I don't know based on the provided documents."
-
-        lines = [f"Answer: {answer_line}", "Steps:"]
-        for i, c in enumerate(chunks, 1):
-            # 取首句/首行做摘要step
-            t = c["text"].replace("\n", " ").strip()
-            step = t.split(".")[0][:80] if t else "See evidence"
-            lines.append(f"{i}. {step} ({c['chunk_id']})")
-        return "\n".join(lines)
-
-    ans = _ensure_steps_format(ans, retrieved_chunks)
-
 
     citations = [c["chunk_id"] for c in retrieved_chunks]
 

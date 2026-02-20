@@ -138,54 +138,22 @@ def answer(question: str, tokenizer, embed_text, chunks_meta, index, llm_fn, top
     merged = filter_chunks_by_doc(merged, allowed)
 
     # --- 关键：给Graph扩展留配额，保证它能体现在最终证据里 ---
-
-    # 再做一次domain gate过滤（避免图扩展把你拉到别的domain）
-    merged = filter_chunks_by_doc(merged, allowed)
-
     seed_set = set(seed_chunks)
     seed_part = [c for c in merged if c["chunk_id"] in seed_set]
     graph_part = [c for c in merged if c["chunk_id"] not in seed_set]
 
-    # 目标：seed里至少覆盖不同doc_id，同时给graph留位置
-    graph_quota = 2 if len(graph_part) > 0 and top_k >= 4 else (1 if len(graph_part) > 0 else 0)
-    seed_quota = max(1, top_k - graph_quota)
+    seed_keep = min(len(seed_part), max(1, top_k - 2))  # 至少留1个seed
+    final_chunks = seed_part[:seed_keep]
 
-    # --- 关键改动：seed按doc_id做“先覆盖后补足” ---
-    seed_selected = []
-    seen_docs = set()
-    seen_chunks = set()
-
-    # 第一轮：每个doc_id先拿一个（按seed_part原顺序=FAISS优先顺序）
-    for c in seed_part:
-        doc = c.get("doc_id", "")
-        if doc and doc not in seen_docs:
-            seed_selected.append(c)
-            seen_docs.add(doc)
-            seen_chunks.add(c["chunk_id"])
-        if len(seed_selected) >= seed_quota:
-            break
-
-    # 第二轮：按顺序补足到seed_quota
-    if len(seed_selected) < seed_quota:
-        for c in seed_part:
-            if c["chunk_id"] not in seen_chunks:
-                seed_selected.append(c)
-                seen_chunks.add(c["chunk_id"])
-            if len(seed_selected) >= seed_quota:
-                break
-
-    final_chunks = seed_selected
-
-    # --- 再补graph，保证GraphRAG收益能体现 ---
+    seen = {c["chunk_id"] for c in final_chunks}
     for c in graph_part:
-        if c["chunk_id"] not in seen_chunks:
+        if c["chunk_id"] not in seen:
             final_chunks.append(c)
-            seen_chunks.add(c["chunk_id"])
+            seen.add(c["chunk_id"])
         if len(final_chunks) >= top_k:
             break
 
     retrieved_chunks = final_chunks
-
 
     # 3）把debug打印改成“过滤后”的，避免你误以为门禁没生效
     print("seed_chunks:", seed_chunks[:5])

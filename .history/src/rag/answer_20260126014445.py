@@ -138,7 +138,23 @@ def answer(question: str, tokenizer, embed_text, chunks_meta, index, llm_fn, top
     merged = filter_chunks_by_doc(merged, allowed)
 
     # --- 关键：给Graph扩展留配额，保证它能体现在最终证据里 ---
+    '''
+    seed_set = set(seed_chunks)
+    seed_part = [c for c in merged if c["chunk_id"] in seed_set]
+    graph_part = [c for c in merged if c["chunk_id"] not in seed_set]
 
+    seed_keep = min(len(seed_part), max(1, top_k - 2))  # 至少留1个seed
+    final_chunks = seed_part[:seed_keep]
+
+    seen = {c["chunk_id"] for c in final_chunks}
+    for c in graph_part:
+        if c["chunk_id"] not in seen:
+            final_chunks.append(c)
+            seen.add(c["chunk_id"])
+        if len(final_chunks) >= top_k:
+            break
+
+    retrieved_chunks = final_chunks'''
     # 再做一次domain gate过滤（避免图扩展把你拉到别的domain）
     merged = filter_chunks_by_doc(merged, allowed)
 

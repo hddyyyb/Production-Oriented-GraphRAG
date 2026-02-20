@@ -84,13 +84,14 @@ with open(graph_path, "rb") as f:
 # 向量化函数（用于在demo中检索相似片段）
 # 2) Embedder（检索用）
 embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-# 领域：贷款（loan）, 行为：审批流程（approval process）
-# 预期答案结构：步骤型 / 流程型
 
 def embed_text(text):
     return embed_model.encode(text)
 
 # 问答示例
+# 领域：贷款（loan）
+# 行为：审批流程（approval process）
+# 预期答案结构：步骤型 / 流程型
 question = "What is the approval process for loans?"
 
 # 调用答案生成函数（此处模拟调用实际LLM）

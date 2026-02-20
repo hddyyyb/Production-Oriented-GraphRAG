@@ -84,27 +84,39 @@ with open(graph_path, "rb") as f:
 # 向量化函数（用于在demo中检索相似片段）
 # 2) Embedder（检索用）
 embed_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-# 领域：贷款（loan）, 行为：审批流程（approval process）
-# 预期答案结构：步骤型 / 流程型
 
 def embed_text(text):
     return embed_model.encode(text)
 
 # 问答示例
+# 领域：贷款（loan）
+# 行为：审批流程（approval process）
+# 预期答案结构：步骤型 / 流程型
 question = "What is the approval process for loans?"
 
+# 使用FAISS进行向量检索
+def faiss_search(query, index, top_k=5):
+    query_vec = embed_text(query)  # 获取查询的嵌入向量
+    query_vec = np.array([query_vec], dtype='float32')  # 转换为二维数组，符合FAISS要求
+    
+    distances, indices = index.search(query_vec, top_k)  # 使用FAISS检索最相似的片段
+    return distances, indices
+
+
+distances, indices = faiss_search(question, index)  # 执行检索
+
+retrieved_chunks = [chunks_meta[i] for i in indices[0]]  # 获取检索到的片段并格式化
+
+context = "\n".join([chunk['text'] for chunk in retrieved_chunks])  # 构建上下文，提供给LLM模型
+
+# 打印检索到的相关片段
+print("Retrieved Chunks:\n")
+for chunk in retrieved_chunks:
+    print(f"Chunk ID: {chunk['chunk_id']}\nText: {chunk['text']}\n")
+
 # 调用答案生成函数（此处模拟调用实际LLM）
-# 只调用answer()，不在demo里重复做FAISS检索打印
-result = answer(
-    question,
-    tokenizer,
-    embed_text,
-    chunks_meta,
-    index,
-    llm_fn=llm_gpt_neo_function,
-    G=G,
-    top_k=5
-)
+#result = answer(question, tokenizer, embed_text, chunks_meta, index, llm_fn=llm_gpt_neo_function)
+result = answer(question, tokenizer, embed_text, chunks_meta, index, llm_fn=llm_gpt_neo_function, G=G)
 
 # 打印最终答案
 print("\nFinal Answer:")
